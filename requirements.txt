@@ -1,8 +1,1 @@
-PyMuPDF
-langchain
-langchain-community
-chromadb
-ollama
-streamlit
-# If you want to use OpenAI models, uncomment the line below
-# langchain-openai
+na
