@@ -161,10 +161,17 @@ warn_return_any = true
 warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
+files = ["recursion_hub"]
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [".github.scripts.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+ignore_missing_imports = true
 
 [tool.bandit]
 exclude_dirs = ["tests", "docs"]

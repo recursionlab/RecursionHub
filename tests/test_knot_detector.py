@@ -1,6 +1,5 @@
 """Tests for the knot detector script."""
 
-
 # Import the script - we need to add the scripts directory to the path
 import sys
 from pathlib import Path
@@ -159,6 +158,9 @@ class TestKnotDetectorIntegration:
 
             assert len(frequent) == 1
             assert "Fix issue" in frequent
+
+            # Import the functions to use the mocked versions
+            from knot_detector import add_label, create_backlog_issue
 
             # Simulate the labeling process
             for title in frequent:
