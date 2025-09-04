@@ -1,0 +1,12 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary files
+.presence.json
+/tmp/
+
+# Virtual environments
+venv/
+env/
