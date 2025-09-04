@@ -1,0 +1,166 @@
+# Scheduled maintenance workflow for repository health monitoring
+# Runs weekly to ensure continuous repository health and catch issues early
+name: Scheduled Maintenance
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Mondays at 6 AM UTC
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+jobs:
+  health-check:
+    name: Repository Health Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+
+      - name: Run full test suite
+        run: |
+          mkdir -p reports
+          pytest -xvs --cov-report=xml --cov-report=term-missing --junitxml=reports/junit.xml
+
+      - name: Run security audit
+        run: |
+          pip-audit --format=json --output=reports/security-audit.json || true
+          pip-audit
+
+      - name: Run bandit security scan
+        run: |
+          bandit -r . -f json -o reports/bandit-full.json || true
+          bandit -r .
+
+      - name: Check for outdated dependencies
+        run: |
+          pip list --outdated --format=json > reports/outdated-deps.json || true
+          pip list --outdated
+
+      - name: Upload health check results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: health-check-results
+          path: reports/
+
+      - name: Create issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `🚨 Scheduled Health Check Failed - ${new Date().toISOString().split('T')[0]}`;
+            const body = `
+            ## Scheduled Maintenance Failure
+
+            The weekly health check has failed. Please investigate the following:
+
+            ### Failure Details
+            - **Workflow Run**: [${context.runId}](${context.payload.repository.html_url}/actions/runs/${context.runId})
+            - **Branch**: ${context.ref}
+            - **Commit**: ${context.sha}
+
+            ### Recommended Actions
+            1. Review the workflow logs above
+            2. Check for failing tests or security issues
+            3. Update dependencies if needed
+            4. Fix any linting or type checking issues
+
+            ### Artifacts
+            Check the workflow artifacts for detailed reports:
+            - Test results and coverage
+            - Security audit results
+            - Outdated dependencies list
+
+            ---
+            This issue was created automatically by the scheduled maintenance workflow.
+            `;
+
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['maintenance', 'automated', 'priority-medium']
+            });
+
+  cleanup:
+    name: Cleanup Old Artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Cleanup old workflow runs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: 'ci.yml',
+              per_page: 100
+            });
+
+            // Keep last 50 successful runs, delete older ones
+            const toDelete = runs.data.workflow_runs
+              .filter(run => run.conclusion === 'success')
+              .slice(50);
+
+            for (const run of toDelete) {
+              try {
+                await github.rest.actions.deleteWorkflowRun({
+                  owner,
+                  repo,
+                  run_id: run.id
+                });
+                console.log(`Deleted workflow run ${run.id}`);
+              } catch (error) {
+                console.log(`Failed to delete run ${run.id}: ${error.message}`);
+              }
+            }
+
+  stale-check:
+    name: Check for Stale Issues and PRs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Mark stale issues and PRs
+        uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          stale-issue-message: |
+            This issue has been automatically marked as stale because it has not had activity for 60 days.
+            It will be closed in 7 days if no further activity occurs.
+            Thank you for your contributions to RecursionHub!
+          stale-pr-message: |
+            This pull request has been automatically marked as stale because it has not had activity for 30 days.
+            It will be closed in 7 days if no further activity occurs.
+            Thank you for your contributions to RecursionHub!
+          close-issue-message: |
+            This issue was automatically closed due to inactivity.
+            If this issue is still relevant, please reopen it or create a new issue.
+          close-pr-message: |
+            This pull request was automatically closed due to inactivity.
+            If this PR is still relevant, please reopen it or create a new PR.
+          days-before-issue-stale: 60
+          days-before-pr-stale: 30
+          days-before-issue-close: 7
+          days-before-pr-close: 7
+          stale-issue-label: stale
+          stale-pr-label: stale
+          exempt-issue-labels: pinned,security,enhancement
+          exempt-pr-labels: pinned,security,work-in-progress
