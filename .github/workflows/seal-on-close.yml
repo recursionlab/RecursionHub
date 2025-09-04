@@ -1,0 +1,19 @@
+name: Seal on Close
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  seal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run seal script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python .github/scripts/seal_on_close.py --pr-number ${{ github.event.pull_request.number }} --merged ${{ github.event.pull_request.merged }}

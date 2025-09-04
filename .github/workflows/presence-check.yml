@@ -1,0 +1,41 @@
+name: Presence Check
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  schedule:
+    - cron: '0 */6 * * *' # every 6 hours
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  presence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: python -m pip install requests pyyaml
+      - name: Run tests & linters
+        run: |
+          # TODO: replace with your real tests (pytest, flake8, etc.)
+          echo "Run your tests here"
+      - name: Compute presence metrics
+        run: python .github/scripts/compute_metrics.py --output .presence.json
+      - name: Upload presence artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: presence-json
+          path: .presence.json
+      - name: Comment on PR if presence low
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python .github/scripts/compute_metrics.py --comment-if-low --pr-number ${{ github.event.pull_request.number }}
